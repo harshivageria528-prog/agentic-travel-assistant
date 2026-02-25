@@ -1,30 +1,34 @@
-from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
+from pydantic import BaseModel, Field
+from typing import Optional, List, Dict
 
 
 class TravelState(BaseModel):
+
     user_query: str
 
-    # Flight params
+    # extracted info
     origin: Optional[str] = None
     destination: Optional[str] = None
     departure_date: Optional[str] = None
     return_date: Optional[str] = None
-    legs: Optional[List[Dict[str, str]]] = None  # Multi-leg: [{origin, destination, departureDate}]
 
-    # Hotel params
     hotels_city: Optional[str] = None
     check_in: Optional[str] = None
     check_out: Optional[str] = None
 
-    # Results
-    flights: Optional[List[Dict]] = None
-    hotels: Optional[List[Dict]] = None
+    # intent flags
+    needs_flights: bool = True
+    needs_hotels: bool = True
+
+    # results
+    flights: Optional[List[Dict]] = Field(default_factory=list)
+    hotels: Optional[List[Dict]] = Field(default_factory=list)
+
+    # agent output
     response: Optional[str] = None
 
-    # Edge case feedback
-    errors: Optional[List[str]] = None
-    warnings: Optional[List[str]] = None
+    # production tracking
+    errors: List[str] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
 
-    class Config:
-        extra = "allow"  # Allow extra fields for flexibility
+    legs: Optional[List[Dict]] = None

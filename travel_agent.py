@@ -32,15 +32,25 @@ def extract_info(state: TravelState) -> TravelState:
     response = llm.invoke(prompt)
     text = response.content.strip()
     # Strip markdown code blocks if present
-    if text.startswith("```"):
-        lines = text.split("\n")
-        if lines[0].startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        text = "\n".join(lines)
+    # if text.startswith("```"):
+    #     lines = text.split("\n")
+    #     if lines[0].startswith("```"):
+    #         lines = lines[1:]
+    #     if lines and lines[-1].strip() == "```":
+    #         lines = lines[:-1]
+    #     text = "\n".join(lines)
+    start = text.find("{")
+    end = text.rfind("}") + 1
+    if start != -1 and end != -1:
+        text = text[start:end]
     try:
         data = json.loads(text)
+        needs_flights = data.get("needs_flights")
+        needs_hotels = data.get("needs_hotels")
+        if needs_flights is not None:
+            state.needs_flights = bool(needs_flights)
+        if needs_hotels is not None:
+            state.needs_hotels = bool(needs_hotels)
         state.origin = data.get("origin") or state.origin
         state.destination = data.get("destination") or state.destination
         state.departure_date = data.get("departure_date") or state.departure_date
@@ -61,10 +71,28 @@ def extract_info(state: TravelState) -> TravelState:
             ]
         if state.hotels_city is None and state.destination:
             state.hotels_city = state.destination
+        if state.needs_flights is None or state.needs_hotels is None:
+            _infer_intent_from_params(state)
     except (json.JSONDecodeError, TypeError) as e:
         print(f"JSON parse error: {e}\nModel output: {text[:500]}")
         _fallback_extract(state)
     return state
+
+
+def _infer_intent_from_params(state: TravelState) -> None:
+    """Infer needs_flights/needs_hotels from extracted params when LLM omits them."""
+    q = state.user_query.lower()
+    if state.needs_flights is None:
+        state.needs_flights = bool(
+            (state.origin and state.destination)
+            or (state.legs and len(state.legs) > 0)
+            or "flight" in q or "fly" in q or "plane" in q
+        )
+    if state.needs_hotels is None:
+        state.needs_hotels = bool(
+            (state.hotels_city or (state.destination and "hotel" in q))
+            or "hotel" in q or "accommodation" in q or "stay" in q
+        )
 
 
 def _fallback_extract(state: TravelState) -> None:
@@ -94,6 +122,7 @@ def _fallback_extract(state: TravelState) -> None:
         state.departure_date = parse_date_from_text(state.user_query)
     if state.destination and not state.hotels_city:
         state.hotels_city = state.destination
+    _infer_intent_from_params(state)
 
 
 def generate_response(state: TravelState) -> TravelState:
@@ -123,10 +152,12 @@ Write a helpful, concise travel recommendation. If there are errors, acknowledge
 
 
 def run_agent(user_query: str) -> TravelState:
-    """Main agent pipeline."""
+    """Main agent pipeline. Agent decides which tools to call based on query intent."""
     state = TravelState(user_query=user_query)
     state = extract_info(state)
-    state = flight_tool(state)
-    state = hotel_tool(state)
+    if state.needs_flights:
+        state = flight_tool(state)
+    if state.needs_hotels:
+        state = hotel_tool(state)
     state = generate_response(state)
     return state

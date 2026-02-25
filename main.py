@@ -36,6 +36,8 @@ def _state_to_response(state: TravelState) -> QueryResponse:
     return QueryResponse(
         query=state.user_query,
         extracted_params={
+            "needs_flights": state.needs_flights,
+            "needs_hotels": state.needs_hotels,
             "origin": state.origin,
             "destination": state.destination,
             "departure_date": state.departure_date,
@@ -78,78 +80,6 @@ def query(req: QueryRequest) -> QueryResponse:
             errors=[f"Failed to process query: {e}"],
             warnings=[],
         )
-
-
-@app.get("/flights")
-def get_flights(origin: str, destination: str, date: str, return_date: Optional[str] = None):
-    """
-    Manual flight search endpoint (GET).
-    Uses Amadeus API. Handles past dates and invalid locations via errors.
-    """
-    try:
-        flights = []
-        errors = []
-        if origin and destination and date:
-            try:
-                flights = search_flights(
-                    origin=origin,
-                    destination=destination,
-                    departure_date=date,
-                    return_date=return_date,
-                    adults=1,
-                    max_results=10,
-                )
-            except ValueError as e:
-                errors.append(str(e))
-            except Exception as e:
-                errors.append(f"Flight search failed: {e}")
-
-        return {
-            "query": "manual search",
-            "origin": origin,
-            "destination": destination,
-            "departure_date": date,
-            "return_date": return_date,
-            "flights": flights,
-            "errors": errors,
-        }
-    except Exception as e:
-        raise HTTPException(500, detail={"error": str(e), "trace": traceback.format_exc()})
-
-
-@app.get("/hotels")
-def get_hotels(city: str, check_in: Optional[str] = None, check_out: Optional[str] = None):
-    """
-    Manual hotel search endpoint (GET).
-    Uses Amadeus API. Validates city code and dates.
-    """
-    try:
-        hotels = []
-        errors = []
-        if city:
-            try:
-                hotels = search_hotels(
-                    city_code=city,
-                    check_in=check_in,
-                    check_out=check_out,
-                    adults=1,
-                    max_hotels=10,
-                )
-            except ValueError as e:
-                errors.append(str(e))
-            except Exception as e:
-                errors.append(f"Hotel search failed: {e}")
-
-        return {
-            "query": "manual search",
-            "city": city,
-            "check_in": check_in,
-            "check_out": check_out,
-            "hotels": hotels,
-            "errors": errors,
-        }
-    except Exception as e:
-        raise HTTPException(500, detail={"error": str(e), "trace": traceback.format_exc()})
 
 
 @app.get("/health")
